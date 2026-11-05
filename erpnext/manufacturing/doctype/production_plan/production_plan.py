@@ -18,7 +18,6 @@ from erpnext.manufacturing.doctype.production_plan.mapper import (
 from erpnext.manufacturing.doctype.production_plan.services.material_request import (
 	MaterialRequestService,
 	download_raw_materials,
-	get_bin_details,
 	get_exploded_items,
 	get_item_data,
 	get_items_for_material_requests,
@@ -32,6 +31,7 @@ from erpnext.manufacturing.doctype.production_plan.services.material_request imp
 	set_default_warehouses,
 )
 from erpnext.manufacturing.doctype.production_plan.services.planning_queries import (
+	get_bin_details,
 	get_plan_process_loss_percentage,
 )
 from erpnext.manufacturing.doctype.production_plan.services.reservation import (
@@ -53,6 +53,9 @@ from erpnext.manufacturing.doctype.production_plan.services.work_order_planning 
 )
 from erpnext.manufacturing.doctype.production_plan.services.work_order_quantities import (
 	ProductionPlanWorkOrderQuantities,
+)
+from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import (
+	clear_reserve_stock_if_disabled,
 )
 from erpnext.stock.utils import get_or_make_bin, validate_warehouse_company
 from erpnext.utilities.transaction_base import validate_uom_is_integer
@@ -164,6 +167,7 @@ class ProductionPlan(Document):
 		self.validate_raw_material_group_warehouse()
 		if self.for_warehouse:
 			validate_warehouse_company(self.for_warehouse, self.company)
+		clear_reserve_stock_if_disabled(self)
 		self.enable_auto_reserve_stock()
 
 	def on_update(self):

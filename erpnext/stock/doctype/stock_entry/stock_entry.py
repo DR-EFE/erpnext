@@ -680,6 +680,10 @@ class StockEntry(StockController, SubcontractingInwardController):
 		if any(d.s_warehouse for d in self.get("items")):
 			return True
 
+		return self.is_rm_cost_from_consumption_entries()
+
+	def is_rm_cost_from_consumption_entries(self) -> bool:
+		"""Whether the consumption entries replace the raw materials of this entry."""
 		settings = frappe.get_single("Manufacturing Settings")
 		if settings.material_consumption and settings.get_rm_cost_from_consumption_entry and self.work_order:
 			return bool(self.get_consumption_entries())
@@ -747,8 +751,16 @@ class StockEntry(StockController, SubcontractingInwardController):
 				frappe.get_value("BOM Secondary Item", d.bom_secondary_item, "cost_allocation_per")
 			)
 			if flt(d.transfer_qty):
+				secondary_items_qty = sum(
+					flt(item.transfer_qty)
+					for item in self.items
+					if item.bom_secondary_item == d.bom_secondary_item
+					and not item.s_warehouse
+					and not item.set_basic_rate_manually
+					and not is_costed_out_of_finished_item(item)
+				)
 				allocation_basis = secondary_items_cost_basis - self.get_costed_out_items_cost()
-				d.basic_rate = (allocation_basis * (cost_allocation_per / 100)) / d.transfer_qty
+				d.basic_rate = (allocation_basis * (cost_allocation_per / 100)) / secondary_items_qty
 				has_derived_rate = True
 
 		# A rate of zero that was derived rather than left unset is a real cost. Falling back to
@@ -2030,6 +2042,20 @@ def make_stock_in_entry(source_name: str, target_doc: str | dict | Document | No
 
 		target_doc.s_warehouse = source_doc.t_warehouse
 		target_doc.qty = get_remaining_qty_in_row_uom(source_doc)
+		map_target_dimensions_to_source(source_doc, target_doc)
+
+	def map_target_dimensions_to_source(source_doc, target_doc):
+		# the stock sits in transit with the outward entry's target dimensions,
+		# so the end transit entry must take it out from there
+		from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
+
+		for dimension in get_inventory_dimensions():
+			fieldname = dimension.source_fieldname
+			if fieldname.startswith("to_") or not target_doc.meta.has_field(f"to_{fieldname}"):
+				continue
+
+			target_doc.set(fieldname, source_doc.get(f"to_{fieldname}"))
+			target_doc.set(f"to_{fieldname}", None)
 
 	def get_remaining_qty_in_row_uom(source_doc):
 		remaining_qty = get_remaining_transfer_qty(source_doc)
