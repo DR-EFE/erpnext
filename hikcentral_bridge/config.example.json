@@ -1,0 +1,9 @@
+{
+  "erpnext_url": "http://127.0.0.1:8000",
+  "site_timezone": "America/Mexico_City",
+  "site_zones": {
+    "CDMX": "America/Mexico_City",
+    "OAX": "America/Mexico_City"
+  },
+  "ledger_path": "~/.local/share/hikcentral_bridge/events.sqlite3"
+}

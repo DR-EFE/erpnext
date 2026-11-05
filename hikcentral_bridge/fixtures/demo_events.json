@@ -1,0 +1,6 @@
+[
+  {"source_event_id":"HIK-DEMO-CDMX-IN","employee_no":"HIK-DEMO-CDMX","site_code":"CDMX","occurred_at":"2026-11-02T09:00:00-06:00","device_id":"HIK-CDMX-01","direction":"IN"},
+  {"source_event_id":"HIK-DEMO-CDMX-OUT","employee_no":"HIK-DEMO-CDMX","site_code":"CDMX","occurred_at":"2026-11-02T18:00:00-06:00","device_id":"HIK-CDMX-01","direction":"OUT"},
+  {"source_event_id":"HIK-DEMO-OAX-IN","employee_no":"HIK-DEMO-OAX","site_code":"OAX","occurred_at":"2026-11-02T09:05:00-06:00","device_id":"HIK-OAX-01","direction":"IN"},
+  {"source_event_id":"HIK-DEMO-OAX-OUT","employee_no":"HIK-DEMO-OAX","site_code":"OAX","occurred_at":"2026-11-02T18:02:00-06:00","device_id":"HIK-OAX-01","direction":"OUT"}
+]
