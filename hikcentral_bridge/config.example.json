@@ -5,5 +5,14 @@
     "CDMX": "America/Mexico_City",
     "OAX": "America/Mexico_City"
   },
+  "person_map": {},
+  "device_sites": {
+    "HIK-CDMX-01": "CDMX",
+    "HIK-OAX-01": "OAX"
+  },
+  "demo_employees": [
+    ["HIK-DEMO-CDMX", "CDMX"],
+    ["HIK-DEMO-OAX", "OAX"]
+  ],
   "ledger_path": "~/.local/share/hikcentral_bridge/events.sqlite3"
 }

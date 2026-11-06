@@ -2,6 +2,26 @@
 
 Este puente reproduce **marcajes originales simulados** en `Employee Checkin`. Frappe HR genera `Attendance` al cerrar el turno. No procesa nómina ni consulta aún HikCentral: el endpoint, autenticación y esquema reales se conectarán cuando estén disponibles.
 
+## Página local de marcaje
+
+La nueva página permite demostrar el flujo sin terminal. Desde Ubuntu/WSL, con el Bench activo y después de ejecutar `site_cli seed`:
+
+```bash
+cd /mnt/c/Users/pipe6/Documents/erpnext
+python3 -m hikcentral_bridge serve
+```
+
+Abrir `http://localhost:8765` en Windows. Registrar entrada y salida de los dos empleados ficticios el mismo día. La página guarda cada evento con un `eventId` en el SQLite del puente y consulta la fuente local cada 10 segundos para enviarlo a Frappe. `python3 -m hikcentral_bridge sync` fuerza una consulta; las siguientes lecturas quedan como `skipped` en el ledger. La página es solo local y no registra datos dentro de HikCentral.
+
+Después de las cuatro marcas, para la fecha elegida:
+
+```bash
+~/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli finalize --date 2026-11-05
+~/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli verify --date 2026-11-05
+```
+
+El módulo carga automáticamente `~/.config/hikcentral_bridge/erpnext.env`. Para probar la autenticación OpenAPI, copiar la plantilla `hikcentral.env.example` a `~/.config/hikcentral_bridge/hikcentral.env`, completar los valores fuera de Git y ejecutar `python3 -m hikcentral_bridge probe`. Mantener `HIKCENTRAL_VERIFY_TLS=true`; si hay CA interna, configurar `HIKCENTRAL_CA_BUNDLE`. El cliente firmado y la interfaz paginada existen, pero activar la fuente real requiere contrastar el contrato de búsqueda de eventos originales con el Developer Guide 2.6.3.
+
 ## Instalación local (Ubuntu en WSL)
 
 El Bench y la base de datos están fuera del repositorio, en `~/frappe/hikcentral-bench`. Este checkout de ERPNext está en `/mnt/c/Users/pipe6/Documents/erpnext`. El Bench usa una copia superficial de la misma revisión (`911a478`) en el disco Linux; el puente permanece en este checkout. Frappe, ERPNext y HRMS usan `develop` de la serie 17.
@@ -40,6 +60,7 @@ cd ../../.. && ~/.local/bin/bench build --app erpnext && ~/.local/bin/bench buil
 En una terminal WSL, iniciar el Bench. En otra, crear el sitio y cargar los datos ficticios:
 
 ```bash
+source ~/.nvm/nvm.sh
 cd ~/frappe/hikcentral-bench && ~/.local/bin/bench start
 ```
 
@@ -54,6 +75,7 @@ El usuario de API tiene permisos de crear y leer `Employee Checkin` y de leer/es
 ## Arranque diario
 
 ```bash
+source ~/.nvm/nvm.sh
 cd ~/frappe/hikcentral-bench
 bench start
 ```
@@ -66,15 +88,12 @@ En otra terminal WSL, cargar las credenciales locales generadas durante la prepa
 
 ```bash
 cd /mnt/c/Users/pipe6/Documents/erpnext
-set -a
-source ~/.config/hikcentral_bridge/erpnext.env
-set +a
 python3 -m hikcentral_bridge hikcentral_bridge/fixtures/demo_events.json
 ```
 
 La salida muestra `source_event_id`, estado y nombre del `Employee Checkin`. Al repetir el comando, los eventos ya enviados salen como `skipped`. El registro SQLite se guarda en `~/.local/share/hikcentral_bridge/events.sqlite3` y relaciona el identificador de origen con el Checkin creado. Si se elimina el sitio o se crean otros datos de prueba, conservar o restablecer ese registro de forma coherente.
 
-El archivo `config.example.json` contiene la URL del sitio, zona horaria de ERPNext y mapa de zonas por sede. Para cambiarlo, copiarlo a `config.local.json` (ignorado por Git) y pasar `--config hikcentral_bridge/config.local.json` antes del archivo de eventos. Las credenciales se leen solo de `ERPNEXT_API_KEY` y `ERPNEXT_API_SECRET`.
+El archivo `config.example.json` contiene la URL del sitio, zona horaria de ERPNext, mapa de zonas por sede, mapa opcional de `personId` a `attendance_device_id` y mapa de dispositivos a sede. Para cambiarlo, copiarlo a `config.local.json` (ignorado por Git) y pasar `--config hikcentral_bridge/config.local.json` antes del archivo de eventos. Las credenciales de Frappe se leen de `ERPNEXT_API_KEY` y `ERPNEXT_API_SECRET` o de su archivo local.
 
 ## Verificar
 
@@ -84,7 +103,7 @@ cd /mnt/c/Users/pipe6/Documents/erpnext
 ~/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli verify
 ```
 
-La verificación espera cuatro `Employee Checkin` y dos `Attendance` para el 2 de noviembre de 2026. Si los Checkin están pero no la asistencia, comprobar `Last Sync of Checkin`, la ventana del turno y el programador; también se puede usar **Mark Attendance** en el turno. Para repetir toda la demo desde cero, `~/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli reset-attempt` elimina únicamente los marcajes y asistencias ficticios de esta prueba y sus cuatro entradas del registro local.
+La verificación espera cuatro `Employee Checkin` y dos `Attendance` para el 2 de noviembre de 2026. Si los Checkin están pero no la asistencia, comprobar `Last Sync of Checkin`, la ventana del turno y el programador; también se puede usar **Mark Attendance** en el turno. Para repetir la demo desde cero, detén la página y ejecuta `~/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli reset-attempt --date 2026-11-02`. El comando elimina los marcajes, asistencias y eventos locales de ese día de los empleados de prueba; conserva los datos maestros.
 
 Pruebas del puente:
 

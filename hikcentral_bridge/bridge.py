@@ -8,7 +8,7 @@ import os
 import sqlite3
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,6 +35,12 @@ class Config:
 	site_timezone: str
 	site_zones: dict[str, str]
 	ledger_path: Path
+	person_map: dict[str, str] = field(default_factory=dict)
+	device_sites: dict[str, str] = field(default_factory=dict)
+	demo_employees: tuple[tuple[str, str], ...] = (
+		("HIK-DEMO-CDMX", "CDMX"),
+		("HIK-DEMO-OAX", "OAX"),
+	)
 
 	@classmethod
 	def load(cls, path: Path) -> Config:
@@ -44,6 +50,9 @@ class Config:
 			site_timezone=data["site_timezone"],
 			site_zones=data["site_zones"],
 			ledger_path=Path(data["ledger_path"]).expanduser(),
+			person_map=data.get("person_map", {}),
+			device_sites=data.get("device_sites", {}),
+			demo_employees=tuple(tuple(row) for row in data.get("demo_employees", cls.demo_employees)),
 		)
 
 
@@ -95,6 +104,14 @@ class Ledger:
 				updated_at TEXT NOT NULL
 			)"""
 		)
+		self.db.execute(
+			"""CREATE TABLE IF NOT EXISTS source_issues (
+				source_event_id TEXT PRIMARY KEY,
+				fingerprint TEXT NOT NULL,
+				error TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)"""
+		)
 		self.db.commit()
 
 	def get(self, event_id: str) -> tuple[str, str, str | None] | None:
@@ -126,6 +143,32 @@ class Ledger:
 
 	def close(self):
 		self.db.close()
+
+	def record_source_issue(self, raw: dict[str, Any], error: str):
+		event_id = raw.get("eventId")
+		if not isinstance(event_id, str) or not event_id:
+			return
+		self.db.execute(
+			"""INSERT INTO source_issues VALUES (?, ?, ?, ?)
+			ON CONFLICT(source_event_id) DO UPDATE SET
+				fingerprint=excluded.fingerprint, error=excluded.error, updated_at=excluded.updated_at""",
+			(event_id, event_fingerprint(raw), error, datetime.now(timezone.utc).isoformat()),
+		)
+		self.db.commit()
+
+	def recent_statuses(self, limit: int = 20) -> list[dict[str, str | None]]:
+		rows = self.db.execute(
+			"""SELECT source_event_id, status, checkin_name, error FROM (
+				SELECT source_event_id, status, checkin_name, error, updated_at FROM events
+				UNION ALL
+				SELECT source_event_id, 'invalid', NULL, error, updated_at FROM source_issues
+			) ORDER BY updated_at DESC LIMIT ?""",
+			(limit,),
+		).fetchall()
+		return [
+			{"event_id": row[0], "status": row[1], "checkin_name": row[2], "error": row[3]}
+			for row in rows
+		]
 
 	def forget(self, event_ids: list[str]):
 		self.db.executemany(

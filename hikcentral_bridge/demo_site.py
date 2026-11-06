@@ -6,6 +6,7 @@ Run through ``bench --site hikcentral.localhost execute`` with this repository o
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date, datetime, timedelta
 
 import frappe
 
@@ -164,18 +165,20 @@ def seed():
 	)
 
 
-def finalize():
-	"""Close the simulated shift window and mark attendance after replay."""
+def finalize(day: str = DAY):
+	"""Close the selected demo shift window and mark attendance."""
 	frappe.set_user("Administrator")
+	selected = date.fromisoformat(day)
 	shift = frappe.get_doc("Shift Type", SHIFT)
-	shift.last_sync_of_checkin = "2026-11-03 00:00:00"
+	shift.process_attendance_after = day
+	shift.last_sync_of_checkin = datetime.combine(selected + timedelta(days=1), datetime.min.time())
 	shift.save(ignore_permissions=True)
 	shift.process_auto_attendance()
 	frappe.db.commit()
-	return verify()
+	return verify(day)
 
 
-def verify():
+def verify(day: str = DAY):
 	"""Assert the four source punches created two submitted Present records."""
 	checkins = frappe.get_all(
 		"Employee Checkin",
@@ -189,13 +192,13 @@ def verify():
 	checkins = [
 		row
 		for row in checkins
-		if row.employee in {emp.name for emp in employees} and str(row.time).startswith(DAY)
+		if row.employee in {emp.name for emp in employees} and str(row.time).startswith(day)
 	]
 	assert len(checkins) == 4, f"expected 4 checkins, found {len(checkins)}"
 	assert all(row.attendance and not row.offshift for row in checkins), "checkins must link to Attendance"
 	attendance = frappe.get_all(
 		"Attendance",
-		filters={"attendance_date": DAY, "employee": ["in", [emp.name for emp in employees]]},
+		filters={"attendance_date": day, "employee": ["in", [emp.name for emp in employees]]},
 		fields=["name", "employee", "status", "docstatus", "shift"],
 	)
 	assert len(attendance) == 2, f"expected 2 attendance records, found {len(attendance)}"
@@ -234,25 +237,30 @@ def inspect():
 	)
 
 
-def reset_attempt():
-	"""Remove only this demo's incorrect records before replaying the fixture."""
+def reset_attempt(day: str = DAY):
+	"""Remove this demo's records for one selected day."""
 	frappe.set_user("Administrator")
+	date.fromisoformat(day)
 	employees = frappe.get_all(
 		"Employee", filters={"attendance_device_id": ["in", [x[0] for x in EMPLOYEES]]}, pluck="name"
 	)
 	for attendance_name in frappe.get_all(
-		"Attendance", filters={"employee": ["in", employees], "attendance_date": DAY}, pluck="name"
+		"Attendance", filters={"employee": ["in", employees], "attendance_date": day}, pluck="name"
 	):
 		doc = frappe.get_doc("Attendance", attendance_name)
 		if doc.docstatus == 1:
 			doc.cancel()
 		frappe.delete_doc("Attendance", attendance_name, force=True, ignore_permissions=True)
-	for checkin_name in frappe.get_all(
-		"Employee Checkin", filters={"device_id": ["in", ["HIK-CDMX-01", "HIK-OAX-01"]]}, pluck="name"
+	for checkin in frappe.get_all(
+		"Employee Checkin",
+		filters={"device_id": ["in", ["HIK-CDMX-01", "HIK-OAX-01"]], "employee": ["in", employees]},
+		fields=["name", "time"],
 	):
-		frappe.delete_doc("Employee Checkin", checkin_name, force=True, ignore_permissions=True)
+		if str(checkin.time).startswith(day):
+			frappe.delete_doc("Employee Checkin", checkin.name, force=True, ignore_permissions=True)
 	shift = frappe.get_doc("Shift Type", SHIFT)
 	shift.last_sync_of_checkin = None
+	shift.process_attendance_after = day
 	shift.save(ignore_permissions=True)
 	frappe.db.commit()
-	print("Removed the four demo checkins and demo attendance; master records are retained.")
+	print(f"Removed demo checkins and attendance for {day}; master records are retained.")

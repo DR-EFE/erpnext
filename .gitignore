@@ -18,6 +18,8 @@ __pycache__
 node_modules/
 hikcentral_bridge/config.local.json
 hikcentral_bridge/*.sqlite3
+hikcentral_bridge/.env
+hikcentral_bridge/*.env.local
 .backportrc.json
 # Aider AI Chat
 .aider*
@@ -25,3 +27,4 @@ hikcentral_bridge/*.sqlite3
 # Banking SPA
 erpnext/public/banking
 erpnext/www/banking.html
+.env

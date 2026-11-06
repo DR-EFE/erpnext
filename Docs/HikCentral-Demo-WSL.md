@@ -4,6 +4,70 @@ Guía para ejecutar la demo local desde Windows, pasando a Ubuntu mediante WSL.
 
 La demo reproduce cuatro marcajes simulados de HikCentral, los envía a Frappe HR y genera dos registros de `Attendance` mediante Auto Attendance.
 
+## Nueva demo con página de marcaje
+
+Esta opción permite crear los marcajes desde una página local, sin dispositivo físico. Los eventos se guardan en SQLite con campos similares a registros originales de HikCentral y el puente los consulta cada 10 segundos. La página **no escribe en HikCentral**.
+
+Desde PowerShell abre Ubuntu:
+
+```powershell
+wsl -d Ubuntu
+```
+
+En Ubuntu, asegúrate de que MariaDB y Redis estén activos. Si no lo están, desde otra ventana de PowerShell:
+
+```powershell
+wsl -d Ubuntu -u root -- systemctl start mariadb redis-server
+```
+
+Abre tres terminales de Ubuntu. En la primera inicia ERPNext:
+
+```bash
+source /home/pipe6/.nvm/nvm.sh
+cd /home/pipe6/frappe/hikcentral-bench
+/home/pipe6/.local/bin/bench start
+```
+
+En la segunda prepara empleados y turno, y arranca la página:
+
+```bash
+cd /mnt/c/Users/pipe6/Documents/erpnext
+/home/pipe6/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli seed
+python3 -m hikcentral_bridge serve
+```
+
+Abre `http://localhost:8765` desde Windows. Selecciona cada empleado y registra una entrada y una salida el mismo día, por ejemplo a las 09:00 y 18:00. La página enseña el identificador de origen, el estado de envío y el nombre del `Employee Checkin`. El botón **Sincronizar ahora** permite ejecutar la consulta sin esperar 10 segundos.
+
+En la tercera terminal de Ubuntu puedes forzar o repetir la consulta:
+
+```bash
+cd /mnt/c/Users/pipe6/Documents/erpnext
+python3 -m hikcentral_bridge sync
+```
+
+Repetir `sync` muestra `skipped` para eventos ya enviados. El programa carga automáticamente `~/.config/hikcentral_bridge/erpnext.env`; no necesitas ejecutar `source` ni `set -a` en PowerShell.
+
+Después de cerrar el turno, procesa y verifica el día usado en la página (sustituye la fecha de ejemplo):
+
+```bash
+cd /mnt/c/Users/pipe6/Documents/erpnext
+/home/pipe6/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli finalize --date 2026-11-05
+/home/pipe6/frappe/hikcentral-bench/env/bin/python -m hikcentral_bridge.site_cli verify --date 2026-11-05
+```
+
+La verificación espera cuatro `Employee Checkin` y dos `Attendance` con estado `Present` para ese día. Conviene hacer los cuatro marcajes en un día sin otros registros de estos empleados ficticios.
+
+### Conexión futura con HikCentral real
+
+La configuración pública está en `hikcentral_bridge/hikcentral.env.example`. Copia sus variables, con valores reales, a `~/.config/hikcentral_bridge/hikcentral.env` dentro de Ubuntu y limita sus permisos a tu usuario (`chmod 600`). Nunca pongas la clave secreta en la página ni en `config.example.json`.
+
+```bash
+cd /mnt/c/Users/pipe6/Documents/erpnext
+python3 -m hikcentral_bridge probe
+```
+
+`probe` prueba la firma y conectividad contra el endpoint de versión de OpenAPI. Mantiene TLS validado; para un certificado interno, indica un archivo CA con `HIKCENTRAL_CA_BUNDLE` y usa el nombre de host que figura en el certificado. Si HikCentral corre en Windows y WSL usa NAT, cambia `127.0.0.1` por la IP del host Windows y verifica el puerto HTTPS. El adaptador de lectura real requiere todavía validar la ruta, el body y la respuesta de registros originales con el Developer Guide correspondiente a OpenAPI 2.6.3. El endpoint `/artemis/api/attendance/v1/report` corresponde al reporte diario procesado y no crea marcajes.
+
 ## 1. Abrir Ubuntu desde Windows
 
 Abre PowerShell en cualquier carpeta y ejecuta:
@@ -32,6 +96,7 @@ wsl -d Ubuntu -u root -- systemctl start mariadb redis-server
 Vuelve a Ubuntu y arranca el Bench:
 
 ```bash
+source /home/pipe6/.nvm/nvm.sh
 cd /home/pipe6/frappe/hikcentral-bench
 /home/pipe6/.local/bin/bench start
 ```
@@ -94,7 +159,6 @@ En la misma segunda ventana de Ubuntu:
 
 ```bash
 cd /mnt/c/Users/pipe6/Documents/erpnext
-source /home/pipe6/.config/hikcentral_bridge/erpnext.env
 python3 -m hikcentral_bridge hikcentral_bridge/fixtures/demo_events.json
 ```
 
@@ -149,7 +213,7 @@ Las pruebas negativas cubren empleado inexistente, dirección inválida, credenc
 
 ## 9. Reiniciar la demo desde cero
 
-Este comando elimina únicamente los cuatro marcajes y las dos asistencias ficticias de la demo. Conserva compañía, empleados y turno:
+Este comando elimina los marcajes y asistencias ficticios del día seleccionado, incluidos los eventos de la página local. Conserva compañía, empleados y turno. Detén la página antes de ejecutarlo:
 
 ```bash
 cd /mnt/c/Users/pipe6/Documents/erpnext
